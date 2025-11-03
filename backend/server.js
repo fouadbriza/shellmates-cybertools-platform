@@ -12,13 +12,10 @@ app.use(express.json());
 
 
 
-app.get("/",(req,res)=>{
-    res.json({message:'cyber security tool'})
-});
-
 connectDB();
 
 app.use("/tools",toolRoutes);
+
 
 
 const PORT=process.env.PORT || 9000;
