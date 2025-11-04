@@ -7,6 +7,61 @@ const { SMTPClient } = require("emailjs");
 
 const nodemailer = require("nodemailer");
 
+
+
+
+router.post("/addTool", async (req, res) => {
+  try {
+    const { name, description, github_url, category, usage_instructions, extra_resources,email } = req.body;
+
+    
+    if (!name || !description || !github_url || !category || !email) {
+      return res.status(400).json({ message: "Required fields are missing" });
+    }
+
+
+     const newTool = await Tool.create({
+      name,
+      category,
+      description,
+      github_url,
+      usage_instructions,
+      extra_resources,
+      email,
+      status: "pending",
+    });
+
+
+   const approveLink = `${process.env.APP_URL}/tools/approve/${newTool._id}`;
+   const rejectLink = `${process.env.APP_URL}/tools/reject/${newTool._id}`;
+
+
+
+await sendEmailToAdmin({
+    name,
+  description,
+  email,
+  category,
+  github_url,
+  usage_instructions,
+  extra_resources,
+  approveLink,
+  rejectLink
+  });
+
+
+    return res.status(201).json({
+      message: "Tool added successfully",
+      data: newTool,
+    });
+
+  } catch (error) {
+    return res.status(500).json({ message: "Server Error", error });
+  }
+});  
+
+
+
 async function sendEmailToAdmin(tool) {
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,  
@@ -47,59 +102,11 @@ async function sendEmailToAdmin(tool) {
 
 
 
-router.post("/addTool", async (req, res) => {
-  try {
-    const { name, description, github_url, category, usage_instructions, extra_resources,email } = req.body;
-
-    
-    if (!name || !description || !github_url || !category || !email) {
-      return res.status(400).json({ message: "Required fields are missing" });
-    }
-
-
-     const newTool = await Tool.create({
-      name,
-      category,
-      description,
-      github_url,
-      usage_instructions,
-      extra_resources,
-      email,
-      status: "pending",
-    });
-
-
-    const approveLink = `${process.env.APP_URL}/tools/approve/${newTool._id}`;
-    const rejectLink = `${process.env.APP_URL}/tools/reject/${newTool._id}`;
-
-
-await sendEmailToAdmin({
-    name,
-  description,
-  email,
-  category,
-  github_url,
-  usage_instructions,
-  extra_resources,
-  approveLink,
-  rejectLink
-  });
-
-
-    return res.status(201).json({
-      message: "Tool added successfully",
-      data: newTool,
-    });
-
-  } catch (error) {
-    return res.status(500).json({ message: "Server Error", error });
-  }
-});
 
 
 
 //search and categoty route
-router.get("/search", async (req,res) => {
+/*router.get("/search", async (req,res) => {
 const {name, category, language, activity, trending} = req.query; 
 const filter ={}
 if (name) {filter.name=name};
@@ -126,17 +133,67 @@ return res.status(200).json(data)
   return res.status(500).json({message:"Server Error" ,error})
 
 }
-})
+})*/
 
 
-router.post("/approve/:id", async (req, res) => {
-  await Tool.findByIdAndUpdate(req.params.id, { status: "approved" });
-  res.send("✅ Tool approved and now visible on the website.");
+router.get("/category",async(req,res)=>{
+  const {category}=req.query;
+
+    try {
+    const tools = await getToolsByCategory(category);
+
+    if (!tools || tools.length === 0) {
+      return res.status(404).json({ message: "No Tools Found" });
+    }
+
+    res.status(200).json(tools);
+
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
 });
 
-router.post("/reject/:id", async (req, res) => {
-  await Tool.findByIdAndUpdate(req.params.id, { status: "rejected" });
-  res.send("❌ Tool rejected.");
+/*router.get("/search", async (req, res) => {
+  const { name, language, trending, activity } = req.query;
+
+  const filter = {};
+  if (name) filter.name = { $regex: name, $options: "i" };
+  if (language) filter.language = { $regex: `^${language}$`, $options: "i" };
+  if (trending) filter.trending = { $gte: Number(trending) };
+
+  if (activity) {
+    const now = Date.now();
+    if (activity === "active") filter.lastUpdated = { $gte: new Date(now - 30 * 86400000) };
+    if (activity === "recent") filter.lastUpdated = { $gte: new Date(now - 7 * 86400000) };
+    if (activity === "inactive") filter.lastUpdated = { $lte: new Date(now - 90 * 86400000) };
+  }
+
+  try {
+    const noFiltersUsed = Object.keys(filter).length === 0;
+    const tools = noFiltersUsed
+      ? await Tool.find().sort({ createdAt: -1 }).limit(10)
+      : await Tool.find(filter);
+
+    if (!tools.length) return res.status(404).json({ message: "No Tools Found" });
+
+    res.status(200).json(tools);
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error });
+  }
+});
+
+*/
+
+
+
+
+router.get("/pending", async (req, res) => {
+  try {
+    const pendingTools = await Tool.find({ status: "pending" });
+    res.status(200).json(pendingTools);
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error });
+  }
 });
 
 router.get("/pending", async (req, res) => {
@@ -164,6 +221,28 @@ router.get("/all", async (req, res) => {
 
 
 
+
+/*router.get("/category", async (req, res) => {
+  const { category } = req.query;
+  try {
+    const tools = await getToolsByCategory(category);
+    if (!tools.length) return res.status(404).json({ message: "No Tools Found" });
+    res.status(200).json(tools);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});*/
+
+router.get("/approve/:id", async (req, res) => {
+  await Tool.findByIdAndUpdate(req.params.id, { status: "approved" },{ new: true });
+  res.send("Tool approved and now visible on the website.");
+});
+
+router.get("/reject/:id", async (req, res) => {
+  await Tool.findByIdAndUpdate(req.params.id, { status: "rejected" },{ new: true });
+  res.send("Tool rejected.");
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const tool = await Tool.findById(req.params.id);
@@ -173,17 +252,6 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ message: "Server Error", error });
   }
 });
-
-
-
-
-
-
-
-
-
-
-
 
 module.exports = router;
 
