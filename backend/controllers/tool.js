@@ -3,8 +3,6 @@ const Tool = require("../models/tool");
 const router = express.Router();
 const axios = require("axios");
 const { SMTPClient } = require("emailjs");
-
-
 const nodemailer = require("nodemailer");
 
 
@@ -12,18 +10,43 @@ const nodemailer = require("nodemailer");
 
 router.post("/addTool", async (req, res) => {
   try {
-    const { name, description, github_url, category, usage_instructions, extra_resources,email } = req.body;
+    let { name, description, github_url, category, usage_instructions, extra_resources,email } = req.body;
 
     
-    if (!name || !description || !github_url || !category || !email) {
+    if (!github_url || !category || !email) {
       return res.status(400).json({ message: "Required fields are missing" });
     }
+
+    //fetching data from github api
+
+    let activity,language,createdAt
+    try {
+      const existing = await Tool.findOne({ github_url });
+      if (existing) return res.status(409).json({ message: "Tool already exists" });
+
+      const fetched = await axios.get(github_url);   
+      const repo_data = fetched.data;
+
+      name = (!name)? repo_data.name : name
+      description = (!description)? repo_data.description : description;
+      activity = repo_data.updated_at;
+      language= repo_data.language; 
+      createdAt = repo_data.created_at
+
+    } catch (error) {
+      return res.status(400).json({ message: "error repo interpretation"});
+    }
+
+
 
 
      const newTool = await Tool.create({
       name,
       category,
       description,
+      activity,
+      language,
+      createdAt,
       github_url,
       usage_instructions,
       extra_resources,
@@ -103,10 +126,8 @@ async function sendEmailToAdmin(tool) {
 
 
 
-
-
-//search and categoty route
-/*router.get("/search", async (req,res) => {
+//search and categoty route (can be used for any tool data fetching)
+router.get("/search", async (req,res) => {
 const {name, category, language, activity, trending} = req.query; 
 const filter ={}
 if (name) {filter.name=name};
@@ -133,7 +154,7 @@ return res.status(200).json(data)
   return res.status(500).json({message:"Server Error" ,error})
 
 }
-})*/
+})
 
 
 router.get("/category",async(req,res)=>{
